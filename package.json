@@ -1,11 +1,12 @@
 {
-  "name": "typescript-node-starter",
+  "name": "stan-simple-client",
   "version": "1.0.0",
-  "description": "Simple starter for typescript projects",
+  "description": "NATS Streaming simple client with some opinions",
   "main": "build/index.js",
   "scripts": {
     "start": "node -r dotenv/config build/index.js",
     "prestart": "npm run build",
+    "start:single": "ts-node -r dotenv/config src/index.ts",
     "start:dev": "nodemon -r dotenv/config --exec ts-node src/index.ts",
     "start:build": "node -r dotenv/config build/index.js",
     "build": "npx tsc -p .",
@@ -15,11 +16,12 @@
     "coverage": "npm test -- --coverage --no-cache --detectOpenHandles",
     "coverage:watch": "npm run coverage -- --forceExit --watch"
   },
-  "keywords": [],
+  "keywords": ["NATS", "queue", "streaming", "events"],
   "author": "Ernesto Fuentes Gómez",
   "license": "ISC",
   "dependencies": {
-    "dotenv": "^6.2.0"
+    "dotenv": "^6.2.0",
+    "node-nats-streaming": "^0.2.6"
   },
   "devDependencies": {
     "@types/jest": "^24.0.11",
