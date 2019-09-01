@@ -359,15 +359,15 @@ export default class NatsStreamingClient extends EventEmitter {
     )
   }
 
-  public closeConnection(): void {
+  public async closeConnection(cleanSubscriptions = true): Promise<void> {
     if (!this.stanClient || this.connectionState !== ConnectionStates.CONNECTED) {
       throw new Error(`NATS connection state is ${this.connectionState}`)
     }
-    this.unsubscribeAll().then(
-      (): void => {
-        this.connectionState = ConnectionStates.CLOSED
-        this.stanClient && this.stanClient.close()
-      },
-    )
+    if (cleanSubscriptions) {
+      await this.unsubscribeAll()
+    }
+
+    this.connectionState = ConnectionStates.CLOSED
+    this.stanClient && this.stanClient.close()
   }
 }
