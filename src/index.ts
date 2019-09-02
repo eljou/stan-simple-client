@@ -73,7 +73,7 @@ export interface NatsSubscription {
   instance: Subscription
 }
 
-export default class NatsStreamingClient extends EventEmitter {
+export class NatsStreamingClient extends EventEmitter {
   private logger: Logger
   private connectionState: ConnectionStates
   private clusterId: string
