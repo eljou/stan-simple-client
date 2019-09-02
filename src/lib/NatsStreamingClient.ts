@@ -14,7 +14,7 @@ export enum ClientEvents {
   NATS_SUBSCRIPTION_ERROR = 'nats:subscription:error',
 }
 
-enum StanConnectionEvents {
+export enum StanConnectionEvents {
   CONNECT = 'connect',
   CLOSE = 'close',
   DISCONNECT = 'disconnect',
@@ -24,7 +24,7 @@ enum StanConnectionEvents {
   ERROR = 'error',
 }
 
-enum ConnectionStates {
+export enum ConnectionStates {
   CONNECTED,
   DISCONNECTED,
   CLOSED,
@@ -68,7 +68,7 @@ export interface MessageResult {
   isRedelivered: boolean
 }
 
-interface NatsSubscription {
+export interface NatsSubscription {
   subject: string
   instance: Subscription
 }
