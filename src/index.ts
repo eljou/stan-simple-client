@@ -147,8 +147,8 @@ export class NatsStreamingClient extends EventEmitter {
               StanConnectionEvents.CONNECTION_LOST,
               (): void => {
                 this.connectionState = ConnectionStates.CLOSED
-                this.emit(ClientEvents.NATS_CONNECTION_LOST)
                 this.logger.error(`NATS server connection lost`)
+                this.emit(ClientEvents.NATS_CONNECTION_LOST)
                 setTimeout((): void => {
                   this.logger.info('Reinstanciating connection')
                   this.relaunchConnection()
@@ -161,38 +161,38 @@ export class NatsStreamingClient extends EventEmitter {
         StanConnectionEvents.DISCONNECT,
         (): void => {
           this.connectionState = ConnectionStates.DISCONNECTED
-          this.emit(ClientEvents.NATS_DISCONNECTED)
           this.logger.info(`NATS server disconnected`)
+          this.emit(ClientEvents.NATS_DISCONNECTED)
         },
       )
       this.stanClient.on(
         StanConnectionEvents.CLOSE,
         (): void => {
           this.connectionState = ConnectionStates.CLOSED
-          this.emit(ClientEvents.NATS_CLOSED)
           this.logger.info(`NATS server connection closed`)
+          this.emit(ClientEvents.NATS_CLOSED)
         },
       )
       this.stanClient.on(
         StanConnectionEvents.RECONNECTING,
         (): void => {
-          this.emit(ClientEvents.NATS_RECONNECTING)
           this.logger.debug(`NATS server reconnecting`)
+          this.emit(ClientEvents.NATS_RECONNECTING)
         },
       )
       this.stanClient.on(
         StanConnectionEvents.RECONNECT,
         (): void => {
           this.connectionState = ConnectionStates.CONNECTED
-          this.emit(ClientEvents.NATS_RECONNECTED)
           this.logger.info(`NATS server reconnected`)
+          this.emit(ClientEvents.NATS_RECONNECTED)
         },
       )
       this.stanClient.on(
         StanConnectionEvents.ERROR,
         (error: NatsError): void => {
-          this.emit(ClientEvents.NATS_ERROR, error)
           this.logger.error(`NATS server reconnected`)
+          this.emit(ClientEvents.NATS_ERROR, error)
         },
       )
     }
