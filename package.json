@@ -1,6 +1,6 @@
 {
   "name": "stan-simple-client",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "NATS Streaming simple client with some opinions",
   "main": "index.js",
   "types": "lib/index.d.ts",
