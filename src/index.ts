@@ -3,7 +3,7 @@ import { NatsError } from 'nats'
 import stan, { Subscription, Stan, Message } from 'node-nats-streaming'
 import { Logger, defaultLogger } from './logger'
 
-export enum ClientEvents {
+export enum NatsClientEvents {
   NATS_CONNECTED = 'nats:connected',
   NATS_CLOSED = 'nats:closed',
   NATS_DISCONNECTED = 'nats:disconnected',
@@ -12,6 +12,7 @@ export enum ClientEvents {
   NATS_RECONNECTING = 'nats:reconnecting',
   NATS_ERROR = 'nats:error',
   NATS_SUBSCRIPTION_ERROR = 'nats:subscription:error',
+  NATS_MAX_RECONNECT_RETRIES = 'nats:max_reconnect:retries',
 }
 
 export enum StanConnectionEvents {
@@ -31,11 +32,14 @@ export enum ConnectionStates {
 }
 
 export interface ConnectionOptions {
+  clientId: string
+  clusterName: string
+  maxReconnectAttempts: number
   restartTimeout?: number
   stanMaxPingOut?: number
   stanPingInterval?: number
   stanEncoding?: string
-  maxReconnectAttempts?: number
+  reconnectTimeWait?: number
 }
 
 export enum SubscriptionModes {
@@ -45,7 +49,6 @@ export enum SubscriptionModes {
   START_AT_TIME_DELTA,
   START_TIME,
 }
-
 export type SubscriptionType =
   | { mode: SubscriptionModes.ALL_AVAILABLE }
   | { mode: SubscriptionModes.START_WITH_LAST_RECEIVED }
@@ -76,35 +79,39 @@ export interface NatsSubscription {
 export class NatsStreamingClient extends EventEmitter {
   private logger: Logger
   private connectionState: ConnectionStates
-  private clusterId: string
-  private clientId: string
   private connectionOptions: ConnectionOptions
   private stanClient: Stan | null
   private serversURI: string[]
   private subscriptions: NatsSubscription[]
+  private disconnectsCounter: number = 10
 
   public constructor(
-    clusterId: string,
-    clientName: string,
     connectionString: string,
-    connectionOptions: ConnectionOptions = {
-      stanMaxPingOut: 3,
-      stanPingInterval: 5000,
-      stanEncoding: 'utf8',
-      maxReconnectAttempts: 10,
-    },
+    connectionOptions: ConnectionOptions,
     logger: Logger = defaultLogger('[queue]'),
   ) {
     super()
+    //TODO: Validate construction parameters
+
     this.logger = logger
     this.subscriptions = []
     this.connectionState = ConnectionStates.DISCONNECTED
     this.connectionOptions = connectionOptions
-    this.stanClient = null
+    this.connectionOptions.stanMaxPingOut = 3
+    this.connectionOptions.stanPingInterval = 5000
+    this.connectionOptions.reconnectTimeWait = 3000
+    this.connectionOptions.stanEncoding = 'utf8'
+    this.connectionOptions.maxReconnectAttempts = connectionOptions.maxReconnectAttempts || -1
+    this.connectionOptions.clusterName = connectionOptions.clusterName
+    this.connectionOptions.clientId = connectionOptions.clientId
 
-    this.clusterId = clusterId
-    this.clientId = `${clientName}-${Date.now()}`
-    this.serversURI = connectionString.split(',')
+    this.stanClient = null
+    const servers = connectionString.split(',')
+    if (servers.length === 0) {
+      throw new Error(`Bad connection string format -> ${connectionString}`)
+    }
+    this.serversURI = servers
+    this.disconnectsCounter = connectionOptions.maxReconnectAttempts
   }
 
   private relaunchConnection(): void {
@@ -130,7 +137,7 @@ export class NatsStreamingClient extends EventEmitter {
   }
 
   public connect(): void {
-    this.stanClient = stan.connect(this.clusterId, this.clientId, {
+    this.stanClient = stan.connect(this.connectionOptions.clusterName, this.connectionOptions.clientId, {
       servers: this.serversURI,
       ...this.connectionOptions,
     })
@@ -139,8 +146,8 @@ export class NatsStreamingClient extends EventEmitter {
         StanConnectionEvents.CONNECT,
         (): void => {
           this.connectionState = ConnectionStates.CONNECTED
-          this.emit(ClientEvents.NATS_CONNECTED)
-          this.logger.info(`NATS server connected with id ${this.clientId}`)
+          this.emit(NatsClientEvents.NATS_CONNECTED)
+          this.logger.info(`NATS server connected with client_id: ${this.connectionOptions.clientId}`)
 
           this.stanClient &&
             this.stanClient.on(
@@ -148,7 +155,7 @@ export class NatsStreamingClient extends EventEmitter {
               (): void => {
                 this.connectionState = ConnectionStates.CLOSED
                 this.logger.error(`NATS server connection lost`)
-                this.emit(ClientEvents.NATS_CONNECTION_LOST)
+                this.emit(NatsClientEvents.NATS_CONNECTION_LOST)
                 setTimeout((): void => {
                   this.logger.info('Reinstanciating connection')
                   this.relaunchConnection()
@@ -162,7 +169,14 @@ export class NatsStreamingClient extends EventEmitter {
         (): void => {
           this.connectionState = ConnectionStates.DISCONNECTED
           this.logger.info(`NATS server disconnected`)
-          this.emit(ClientEvents.NATS_DISCONNECTED)
+          this.emit(NatsClientEvents.NATS_DISCONNECTED)
+          if (this.connectionOptions.maxReconnectAttempts > -1) {
+            this.disconnectsCounter -= 1
+            if (this.disconnectsCounter <= 0) {
+              this.disconnectsCounter = this.connectionOptions.maxReconnectAttempts || 10
+              this.emit(NatsClientEvents.NATS_MAX_RECONNECT_RETRIES, this.connectionOptions.maxReconnectAttempts)
+            }
+          }
         },
       )
       this.stanClient.on(
@@ -170,14 +184,14 @@ export class NatsStreamingClient extends EventEmitter {
         (): void => {
           this.connectionState = ConnectionStates.CLOSED
           this.logger.info(`NATS server connection closed`)
-          this.emit(ClientEvents.NATS_CLOSED)
+          this.emit(NatsClientEvents.NATS_CLOSED)
         },
       )
       this.stanClient.on(
         StanConnectionEvents.RECONNECTING,
         (): void => {
           this.logger.debug(`NATS server reconnecting`)
-          this.emit(ClientEvents.NATS_RECONNECTING)
+          this.emit(NatsClientEvents.NATS_RECONNECTING)
         },
       )
       this.stanClient.on(
@@ -185,14 +199,14 @@ export class NatsStreamingClient extends EventEmitter {
         (): void => {
           this.connectionState = ConnectionStates.CONNECTED
           this.logger.info(`NATS server reconnected`)
-          this.emit(ClientEvents.NATS_RECONNECTED)
+          this.emit(NatsClientEvents.NATS_RECONNECTED)
         },
       )
       this.stanClient.on(
         StanConnectionEvents.ERROR,
         (error: NatsError): void => {
           this.logger.error(`NATS server reconnected`)
-          this.emit(ClientEvents.NATS_ERROR, error)
+          this.emit(NatsClientEvents.NATS_ERROR, error)
         },
       )
     }
@@ -301,7 +315,7 @@ export class NatsStreamingClient extends EventEmitter {
       'error',
       (error): void => {
         this.logger.error(`:[subscription] ERROR:: ${error}`)
-        this.emit(ClientEvents.NATS_SUBSCRIPTION_ERROR)
+        this.emit(NatsClientEvents.NATS_SUBSCRIPTION_ERROR)
       },
     )
     this.subscriptions.push({
